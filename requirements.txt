@@ -1,0 +1,8 @@
+Flask==3.0.3
+openai
+telegram
+python-telegram-bot
+yfinance
+chromadb
+wikipedia-api
+gunicorn==22.0.0
