@@ -5,7 +5,12 @@ app = Flask(__name__)
 
 @app.route("/", methods=['GET'])
 def hello():
-    return 'Welcome to my chatbot'
+    return "<h2>Welcome to APIs my chatbot<h2>"
+
+
+@app.route("/hello", methods=['GET'])
+def hello():
+    return "hello world"
 
 
 if __name__ == '__main__':
