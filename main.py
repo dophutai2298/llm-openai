@@ -4,7 +4,7 @@ import os
 app = Flask(__name__) 
 
 @app.route("/", methods=['GET'])
-def hello():
+def main_welcome():
     return "<h2>Welcome to APIs my chatbot<h2>"
 
 
