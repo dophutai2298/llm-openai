@@ -2,6 +2,7 @@ from flask import Blueprint,request,jsonify
 from app.services import get_current_weather,get_rate_gold,load_history,handle_chat_message,get_wikipedia_doc,normalize_text,view_website
 
 from dotenv import load_dotenv
+import os
 load_dotenv()
 
 api_bp = Blueprint('api', __name__)
@@ -57,4 +58,6 @@ def add_message():
 @api_bp.route("/get_messages", methods=['GET'])
 def get_messages():
     history = load_history()
-    return jsonify({"messages": history}), 200
+    jsonify({"messages": history}), 200
+
+

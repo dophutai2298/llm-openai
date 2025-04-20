@@ -11,3 +11,4 @@ def get_OpenAI():
     api_key=os.getenv('API_KEY_TOGETHER')
     )
     return client
+

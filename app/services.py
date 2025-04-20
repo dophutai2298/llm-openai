@@ -3,9 +3,10 @@ from wikipediaapi import Wikipedia
 import os
 import json
 from config import get_OpenAI
-from constants import system_prompt_function
+from constants import system_prompt_function, system_prompt
 import inspect
 from pydantic import TypeAdapter
+# import groq
 
 import unicodedata
 import re
@@ -26,11 +27,16 @@ def normalize_text(text):
 
 def get_rate_gold(location:str="vietnam"):
     """
-    Get the current gold rates for Vietnam or World.
-    :param prompt: The location to get gold prices for. Accepted values are:
-                     - "vietnam": returns prices for major cities in Vietnam (Hà Nội, TP.HCM)
-                     - "world": returns global gold price ("Giá vàng thế giới")
-    :output: List of dictionaries containing gold prices (new and old), formatted for each selected source. Key New is today's gold price and key old is yesterday's gold price
+    Retrieve the latest gold price based on a specified location. This function is used to track changes in the gold market, helpful for financial planning or investment updates.
+    :param prompt:
+    - location (str): Choose either "vietnam" or "world".
+        - "vietnam": Returns gold prices in major Vietnamese cities such as Hà Nội and TP.HCM.
+        - "world": Returns the current global gold price.
+    :output:
+    - A list of dictionaries with gold price information.
+      Each entry contains:
+        - "new": Today's gold price
+        - "old": Yesterday's gold price
     """
     get_api_gold = requests.get('https://gw.vnexpress.net/cr/?name=tygia_vangv202206')
     data_gold = get_api_gold.json()
@@ -104,10 +110,13 @@ def get_wikipedia_doc(title: str, lang: str = 'en'):
 
 def view_website(url: str):
     """
-    Summarize website content through input url
-    :param prompt: The parameter is URL to get content
-    :output: All content is taken from URL
+    Summarize website content from the given URL.
+    :param url: A valid website URL starting with http:// or https://.
+                This is required to fetch and summarize the website content.
+
+    :output: Returns all the content retrieved from the given URL.
     """
+    
     headers = {
     'Authorization': f'Bearer {os.getenv("AUTHORIZATION_JINA")}'
     }
@@ -137,6 +146,41 @@ def save_message(user_message, bot_message):
         json.dump(history, f, indent=2, ensure_ascii=False)
 
 
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_rate_gold",
+            "description": inspect.getdoc(get_rate_gold),
+            "parameters": TypeAdapter(get_rate_gold).json_schema(),
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_current_weather",
+            "description": inspect.getdoc(get_current_weather),
+            "parameters": TypeAdapter(get_current_weather).json_schema(),
+        }
+    },
+    {
+        "type": "view_website",
+        "function": {
+            "name": "view_website",
+            "description": inspect.getdoc(view_website),
+            "parameters": TypeAdapter(view_website).json_schema(),
+        }
+    }
+    ]
+
+
+FUNCTION_MAP = {
+"get_rate_gold":get_rate_gold,
+"get_current_weather": get_current_weather,
+"view_website": view_website
+}
+
 # To do
 def handle_chat_message(message: str):
     """
@@ -148,9 +192,8 @@ def handle_chat_message(message: str):
         return {"error": "Message is required"}, 400
 
     client = get_OpenAI()
-    
     history = load_history()
-    messages = [{ "role": "system", "content": system_prompt_function }]
+    messages = [{ "role": "system", "content": system_prompt }]
 
     for user_message, bot_message in history:
         if user_message:
@@ -158,13 +201,51 @@ def handle_chat_message(message: str):
             messages.append({"role": "assistant", "content": bot_message})
 
     messages.append({"role": "user", "content": message})
+    print("message: ",message)
 
     response = client.chat.completions.create(
-        model=os.getenv('MODEL'),
-        messages=messages
+        model=os.getenv('MODEL_CHECK_FUNC'),
+        messages=messages,
+        tools=tools,
+        tool_choice="auto",
     )
 
     bot_message = response.choices[0].message.content
-    save_message(message, bot_message)
-
-    return {"message": message, "bot_reply": bot_message}, 200
+    print("res bot_message:",response.choices[0].message)
+    if (bot_message is not None):
+        messages.append({ "role": "system", "content": system_prompt_function })
+        response_chat = client.chat.completions.create(
+            model=os.getenv('MODEL'),
+            messages=messages
+        )
+        print(response_chat.choices[0].message.content)
+        save_message(message, response_chat.choices[0].message.content)
+        return {"message": message, "bot_reply": response_chat.choices[0].message.content}, 200
+    else:
+        first_choice = response.choices[0]
+        tool_call = first_choice.message.tool_calls[0]
+        print("tool_call:",tool_call)
+        tool_call_function = tool_call.function
+        tool_call_arguments = json.loads(tool_call_function.arguments)
+        tool_function = FUNCTION_MAP[tool_call_function.name]
+        result = tool_function(**tool_call_arguments)
+        print("result tool_call:",result)
+        messages.append(first_choice.message)
+        messages.append({
+            "role": "tool",
+            "tool_call_id": tool_call.id,
+            "name": tool_call_function.name,
+            "content": json.dumps({"result": result})
+        })
+        messages.append({ "role": "system", "content": system_prompt_function })
+        response_chat = client.chat.completions.create(
+            model=os.getenv('MODEL_CHECK_FUNC'),
+            messages=messages
+        )
+        
+        first_choice = response_chat.choices[0]
+        print("first_choice:",first_choice)
+        finish_reason = first_choice.finish_reason
+        print("finish_reason:",finish_reason)
+        save_message(message, first_choice.message.content)
+        return {"message": message, "bot_reply": first_choice.message.content}, 200
