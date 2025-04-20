@@ -1,17 +1,6 @@
-from flask import Flask
-import os
+from app import create_app
 
-app = Flask(__name__) 
-
-@app.route("/", methods=['GET'])
-def main_welcome():
-    return "<h2>Welcome to APIs my chatbot<h2>"
-
-
-@app.route("/hello", methods=['GET'])
-def hello():
-    return "hello world"
-
+app = create_app()
 
 if __name__ == '__main__':
     app.run(debug=True)
