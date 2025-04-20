@@ -1,5 +1,8 @@
 import requests
 from wikipediaapi import Wikipedia
+import os
+import json
+
 def get_rate_gold():
     get_api_gold = requests.get('https://gw.vnexpress.net/cr/?name=tygia_vangv202206')
     data_gold = get_api_gold.json()
@@ -48,4 +51,52 @@ def get_wikipedia_doc(title: str, lang: str = 'en'):
     paragraphs = doc.split('\n\n')
     return paragraphs
 
-get_wikipedia_doc("Hồ Chí Minh")
+
+
+history_file_path = "chat_history.json"
+
+
+def load_history():
+    if not os.path.exists(history_file_path):
+        return []
+    with open(history_file_path, "r", encoding="utf-8") as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            return []
+
+
+def save_message(user_message, bot_message):
+    history = load_history()
+    history.append({"user": user_message, "bot": bot_message})
+    with open(history_file_path, "w", encoding="utf-8") as f:
+        json.dump(history, f, indent=2, ensure_ascii=False)
+
+# To do
+def chat_message(system_prompt,app,client,message):
+    if not message:
+        return {"error": "Message is required"}, 400
+    if 'messages' not in app.config:
+        app.config['messages'] = []
+
+    messages = [
+        { "role": "system", "content": system_prompt }]
+    
+    for user_message, bot_message in app.config['messages']:
+        if user_message is not None:
+            messages.append({"role": "user", "content": user_message})
+            messages.append({"role": "assistant", "content": bot_message})
+
+    # Latest message
+    messages.append({"role": "user", "content": message})
+
+
+    print("messages: ",messages)
+    response = client.chat.completions.create(
+    model=os.getenv('MODEL'),
+    messages=messages
+    )
+
+    bot_message = response.choices[0].message.content
+    app.config['messages'].append([message, bot_message])
+    return [{"bot_reply": bot_message,"message":message}]
