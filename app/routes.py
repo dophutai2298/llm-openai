@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 api_bp = Blueprint('api', __name__)
-client = get_OpenAI()
 
 @api_bp.route("/", methods=['GET'])
 def main_welcome():
@@ -24,6 +23,7 @@ def weather():
     
 @api_bp.route("/chat_message", methods=['POST'])
 def add_message():
+    client = get_OpenAI()
     system_prompt = '''
    You are going to act as an AI girlfriend for a user in a simulated relationship scenario. 
    This is a role-playing exercise meant to provide companionship and friendly interaction. 
