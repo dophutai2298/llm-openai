@@ -2,11 +2,60 @@ import requests
 from wikipediaapi import Wikipedia
 import os
 import json
+from config import get_OpenAI
+from constants import system_prompt_function
+import inspect
+from pydantic import TypeAdapter
 
-def get_rate_gold():
+import unicodedata
+import re
+
+def normalize_text(text):
+    # Chuyển thành dạng chuẩn unicode (NFD) để tách dấu ra khỏi chữ
+    text = unicodedata.normalize('NFD', text)
+    
+    # Loại bỏ dấu (loại bỏ các ký tự không phải chữ cái Latin)
+    text = text.encode('ascii', 'ignore').decode('utf-8')
+    
+    # Xóa khoảng trắng và các ký tự không phải chữ cái/thường
+    text = re.sub(r'\s+', '', text)  # Xóa khoảng trắng
+    text = re.sub(r'[^a-zA-Z0-9]', '', text)  # Loại bỏ ký tự đặc biệt
+    
+    return text.lower()
+
+
+def get_rate_gold(location:str="vietnam"):
+    """
+    Get the current gold rates for Vietnam or World.
+    :param prompt: The location to get gold prices for. Accepted values are:
+                     - "vietnam": returns prices for major cities in Vietnam (Hà Nội, TP.HCM)
+                     - "world": returns global gold price ("Giá vàng thế giới")
+    :output: List of dictionaries containing gold prices (new and old), formatted for each selected source. Key New is today's gold price and key old is yesterday's gold price
+    """
     get_api_gold = requests.get('https://gw.vnexpress.net/cr/?name=tygia_vangv202206')
     data_gold = get_api_gold.json()
-    return data_gold['data']['data']['gold']
+ 
+    keys_vietnam = ["ha_noi_sjc", "ha_noi_pnj", "tphcm_pnj", "tphcm_sjc"]
+    keys_world = ["thegioi"]
+    keys = keys_vietnam if location == "vietnam" else keys_world
+    
+    data = data_gold['data']['data']['gold']
+    result=[]
+    for key in keys:
+        new = data["new"].get(key)
+        old = data["old"].get(key)
+        if new and old:
+            result.append({
+                "label": new["label"],
+                "new_buy": new["buy"],
+                "new_sell": new["sell"],
+                "new_date": new["date_label"],
+                "old_buy": old["buy"],
+                "old_sell": old["sell"],
+                "old_date": old["date_label"]
+            })
+    return result
+
 
 
 def get_current_weather(location: str, unit: str='celsius'):
@@ -53,9 +102,24 @@ def get_wikipedia_doc(title: str, lang: str = 'en'):
 
 
 
+def view_website(url: str):
+    """
+    Summarize website content through input url
+    :param prompt: The parameter is URL to get content
+    :output: All content is taken from URL
+    """
+    headers = {
+    'Authorization': f'Bearer {os.getenv("AUTHORIZATION_JINA")}'
+    }
+    url_w_jina = f'https://r.jina.ai/{url}'
+    response = requests.get(url_w_jina, headers=headers)
+    if response.status_code != 200:
+        print(f"Không thể truy cập {url}")
+        return None
+    return response.text
+
+
 history_file_path = "chat_history.json"
-
-
 def load_history():
     if not os.path.exists(history_file_path):
         return []
@@ -72,31 +136,35 @@ def save_message(user_message, bot_message):
     with open(history_file_path, "w", encoding="utf-8") as f:
         json.dump(history, f, indent=2, ensure_ascii=False)
 
+
 # To do
-def chat_message(system_prompt,app,client,message):
+def handle_chat_message(message: str):
+    """
+    Handle chat message logic for AI girlfriend.
+    :param message: The user input message
+    :return: A dict containing original message and bot reply
+    """
     if not message:
         return {"error": "Message is required"}, 400
-    if 'messages' not in app.config:
-        app.config['messages'] = []
 
-    messages = [
-        { "role": "system", "content": system_prompt }]
+    client = get_OpenAI()
     
-    for user_message, bot_message in app.config['messages']:
-        if user_message is not None:
+    history = load_history()
+    messages = [{ "role": "system", "content": system_prompt_function }]
+
+    for user_message, bot_message in history:
+        if user_message:
             messages.append({"role": "user", "content": user_message})
             messages.append({"role": "assistant", "content": bot_message})
 
-    # Latest message
     messages.append({"role": "user", "content": message})
 
-
-    print("messages: ",messages)
     response = client.chat.completions.create(
-    model=os.getenv('MODEL'),
-    messages=messages
+        model=os.getenv('MODEL'),
+        messages=messages
     )
 
     bot_message = response.choices[0].message.content
-    app.config['messages'].append([message, bot_message])
-    return [{"bot_reply": bot_message,"message":message}]
+    save_message(message, bot_message)
+
+    return {"message": message, "bot_reply": bot_message}, 200

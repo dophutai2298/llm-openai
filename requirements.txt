@@ -8,3 +8,4 @@ wikipedia-api
 gunicorn==22.0.0
 wikipedia-api
 dotenv
+unicodedata
