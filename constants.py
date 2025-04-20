@@ -38,37 +38,3 @@ Instructions for incorporating user information:
 
 Your goal is to make the conversation feel alive, personal, and just a little romantic 💕.
 '''
-
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_rate_gold",
-            "description": inspect.getdoc(get_rate_gold),
-            "parameters": TypeAdapter(get_rate_gold).json_schema(),
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_current_weather",
-            "description": inspect.getdoc(get_current_weather),
-            "parameters": TypeAdapter(get_current_weather).json_schema(),
-        }
-    },
-     {
-        "type": "view_website",
-        "function": {
-            "name": "view_website",
-            "description": inspect.getdoc(view_website),
-            "parameters": TypeAdapter(view_website).json_schema(),
-        }
-    }
-    ]
-
-
-    function_list = {
-    "get_rate_gold":get_rate_gold,
-    "get_current_weather": get_current_weather,
-    "view_website": view_website
-    }
